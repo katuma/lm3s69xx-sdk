@@ -30,8 +30,10 @@ void __cs3_reset() {
 }
 
 int _write(int file, char *ptr, int len) {
-    while (len--)
-        UARTCharPut(UART0_BASE, *ptr++);
+    int i;
+    for (i = 0; i < len; i++)
+        UARTCharPut(UART0_BASE, ptr[i]);
+    return i;
 }
 
 int _read(int file, char *ptr, int len)
