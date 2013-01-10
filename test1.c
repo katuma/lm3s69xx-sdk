@@ -5,9 +5,10 @@
 #include <math.h>
 #include <unistd.h>
 
-int a=10000,b,c=2800,d,e,f[2801],g;
 int main()
 {
+    write(0, "hello world\n", 12);
+/*
     char *p = malloc(1024); int n;
     setbuf(stdout, NULL);
     while (1) {
@@ -15,5 +16,5 @@ int main()
         scanf("%s%n", p, &n);
         while (n) putchar(p[--n]);
         printf("\n");
-    }
+    }*/
 }

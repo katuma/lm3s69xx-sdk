@@ -160,7 +160,7 @@ void lwIPEthernetIntHandler(void)
 
     // interrupt claimed by eth if - run driver
     if (rc)
-        stellarisif_interrupt(&net_if);
+        ethernetif_interrupt(&net_if);
 
     // periodicity is ensured by soft irq trigger via lwIPTimer above
     mdi_timer();
