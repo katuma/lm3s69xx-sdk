@@ -39,6 +39,7 @@ typedef signed      short   s16_t;
 typedef unsigned    long    u32_t;
 typedef signed      long    s32_t;
 typedef u32_t               mem_ptr_t;
+typedef u8_t 		    sys_prot_t;
 
 #ifndef BYTE_ORDER
 #define BYTE_ORDER LITTLE_ENDIAN

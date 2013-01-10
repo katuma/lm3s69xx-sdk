@@ -11,14 +11,16 @@
 #include "lwip/mem.h"
 #include "lwip/stats.h"
 
+#include "driverlib/ethernet.h"
+
 #define IP_STATIC       0
 #define IP_DHCP         1
 #define IP_AUTOIP       2
 
-extern void net_init(const u8 *, ulong, ulong, ulong, int);
-extern void net_change(ulong, ulong, ulong, int);
+extern void net_init(const u8_t *, u32_t, u32_t, u32_t, int);
+extern void net_change(u32_t, u32_t, u32_t, int);
 
 // TI stuff
-extern void lwIPTimer(ulong);
+extern void lwIPTimer(u32_t);
 extern void lwIPEthernetIntHandler(void);
 

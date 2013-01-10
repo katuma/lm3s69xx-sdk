@@ -1,39 +1,47 @@
-// TI SDK hw access
-#include "glue.h"
-
-#include "arch/hw_ints.h"
-#include "arch/hw_ethernet.h"
-#include "arch/hw_memmap.h"
-#include "arch/hw_nvic.h"
-#include "arch/hw_sysctl.h"
-#include "arch/hw_types.h"
-#include "drivers/debug.h"
-#include "drivers/ethernet.h"
-#include "drivers/gpio.h"
-#include "drivers/sysctl.h"
-#include "drivers/interrupt.h"
-#include "drivers/rom.h"
-#include "drivers/rom_map.h"
+#include "inc/hw_ints.h"
+#include "inc/hw_ethernet.h"
+#include "inc/hw_memmap.h"
+#include "inc/hw_nvic.h"
+#include "inc/hw_sysctl.h"
+#include "inc/hw_types.h"
+#include "driverlib/debug.h"
+#include "driverlib/ethernet.h"
+#include "driverlib/gpio.h"
+#include "driverlib/sysctl.h"
+#include "driverlib/interrupt.h"
+#include "driverlib/rom.h"
+#include "driverlib/rom_map.h"
 
 #include "lwip/opt.h"
 #include "lwip/sys.h"
 
+
+#include "lwip/dhcp.h"
+#include "lwip/autoip.h"
+#include "lwip/init.h"
+#include "lwip/timers.h"
+
+#include "net.h"
+#include "eth.h"
+
 static struct netif net_if; // our single network interface
 static int net_if_up = 0; // netif is up?
-static uint g_ipmode = IP_STATIC; // method to obtain ip
-static ulong g_ip, g_mask, g_defgw; // ip settings
+static unsigned int g_ipmode = IP_STATIC; // method to obtain ip
+static u32_t g_ip, g_mask, g_defgw; // ip settings
+
+extern u32_t now;
 
 
 // cable detect timer
 static void mdi_timer()
 {
     int i;
-    static ulong mdix_last;
+    static u32_t mdix_last;
     // deal with cross-cable (MDI-X) detect
     // every 200ms check if there is no link (to prevent hammering the register every packet)
     if ((now - mdix_last) > 200 && ((EthernetPHYRead(ETH_BASE, PHY_MR1) & PHY_MR1_LINK) == 0)) {
         // ok, no link
-        if((local_timer - mdix_last) >= 2000) { // and at least for 2 seconds?
+        if((now - mdix_last) >= 2000) { // and at least for 2 seconds?
              // hmm, switch the pairs
             HWREG(ETH_BASE + MAC_O_MDIX) ^= MAC_MDIX_EN;
             mdix_last = now;
@@ -47,7 +55,7 @@ static void mdi_timer()
 
 ////////////////// public /////////////
 // (re)initialize the network with new settings
-void net_change(ulong ip,
+void net_change(u32_t ip,
          unsigned long mask, unsigned long defgw,
          int ipmode)
 {
@@ -107,9 +115,9 @@ void net_change(ulong ip,
     g_defgw = defgw;
 }
 
-void net_init(const u8 *mac, ulong ip,
-         ulong mask, ulong defgw,
-         ulong ipmode)
+void net_init(const u8_t *mac, u32_t ip,
+         u32_t mask, u32_t defgw,
+         int ipmode)
 {
     struct ip_addr dummy;
     dummy.addr = 0;
@@ -118,13 +126,13 @@ void net_init(const u8 *mac, ulong ip,
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ETH);
 
     // set mac
-    EthernetMACAddrSet(ETH_BASE, (u8*)mac);
+    EthernetMACAddrSet(ETH_BASE, (u8_t*)mac);
 
     // fire up lwip
     lwip_init();
 
     // add the interface. no ips yet - net_change will do it.
-    netif_add(&net_if, &dummy, &dummy, &dummy, NULL, stellarisif_init, ip_input);
+    netif_add(&net_if, &dummy, &dummy, &dummy, NULL, ethernetif_init, ip_input);
     netif_set_default(&net_if);
 
     // this will config ips / start dhcp etc as needed
@@ -165,25 +173,6 @@ void lwIPEthernetIntHandler(void)
     // periodicity is ensured by soft irq trigger via lwIPTimer above
     mdi_timer();
     sys_check_timeouts();
-}
-
-//////////////////// LwIP interface //////////////////////////
-// lwip needs to know current time
-ulong sys_now(void)
-{
-    return now;
-}
-
-// CLI
-sys_prot_t sys_arch_protect(void)
-{
-    return((sys_prot_t)MAP_IntMasterDisable());
-}
-
-// STI
-void sys_arch_unprotect(sys_prot_t lev)
-{
-    if((lev&1)==0) MAP_IntMasterEnable();
 }
 
 

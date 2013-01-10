@@ -45,8 +45,21 @@
 #include "lwip/stats.h"
 #include "lwip/snmp.h"
 #include "lwip/ethip6.h"
+#include "lwip/sys.h"
+
 #include "netif/etharp.h"
 #include "netif/ppp_oe.h"
+
+#include "inc/hw_ethernet.h"
+#include "inc/hw_ints.h"
+#include "inc/hw_memmap.h"
+#include "inc/hw_types.h"
+#include "driverlib/ethernet.h"
+#include "driverlib/interrupt.h"
+#include "driverlib/sysctl.h"
+
+
+#include "eth.h"
 
 /* Define those to better describe your network interface. */
 #define IFNAME0 'e'
@@ -54,7 +67,7 @@
 
 struct txdesc {
     struct eth_addr *ethaddr;
-    struct pbuf ring[TXQ];
+    struct pbuf *ring[TXQ];
     u32_t p; // position
     u32_t n; // total
 };
@@ -64,10 +77,10 @@ struct txdesc {
 // resort to byte-shuffling only if necessary
 static void pkt_xmit(struct pbuf *p)
 {
-    // first u16 is packet length
-    *((u16*)(p->payload)) = p->tot_len - 16;
+    // first u16_t is packet length
+    *((u16_t*)(p->payload)) = p->tot_len - 16;
 
-    for (struct pbufq *q = p; q; q = q->next) {
+    for (struct pbuf *q = p; q; q = q->next) {
         u32_t n = q->len / 4;
         u32_t rem = q->len % 4;
         for (u32_t i = 0; i < n; i++)
@@ -77,7 +90,7 @@ static void pkt_xmit(struct pbuf *p)
             u32_t ptr = n * 4; // q->len - rem?
             u32_t acc = 0;
             u32_t i = 0;
-            u8_t *ap = &acc;
+            u8_t *ap = (u8_t*)&acc;
             do {
                 for (n = q->len; ptr < n; ptr++) {
                     ap[i++] = ((u8_t*)q->payload)[ptr];
@@ -180,7 +193,7 @@ void ethernetif_interrupt(struct netif *netif)
             LINK_STATS_INC(link.memerr);
             LINK_STATS_INC(link.drop);
         }
-        pkt_flush(); // XXX should protect against other interrupts?
+        txq_flush(netif); // XXX should protect against other interrupts?
     }
 }
 

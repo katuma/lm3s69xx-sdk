@@ -84,10 +84,12 @@ caddr_t _sbrk(int incr) {
         heap_end = &__cs3_heap_start;
     prev = heap_end;
     if (heap_end + incr > &__cs3_heap_end) {
-        write(1, "heap oflow\n", 11);
+        //write(1, "heap oflow\n", 11);
         return 0;
     }
     heap_end += incr;
     return prev;
 }
+
+
 
