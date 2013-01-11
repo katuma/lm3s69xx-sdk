@@ -61,6 +61,17 @@
 
 #include "eth.h"
 
+#if (PBUF_LINK_HLEN != 16)
+#error "PBUF_LINK_HLEN must be 16 for this interface driver!"
+#endif
+#if (ETH_PAD_SIZE != 2)
+#error "ETH_PAD_SIZE must be 2 for this interface driver!"
+#endif
+#if (!SYS_LIGHTWEIGHT_PROT)
+#error "SYS_LIGHTWEIGHT_PROT must be enabled for this interface driver!"
+#endif
+
+
 /* Define those to better describe your network interface. */
 #define IFNAME0 'e'
 #define IFNAME1 'n'
@@ -83,8 +94,9 @@ static void pkt_xmit(struct pbuf *p)
     for (struct pbuf *q = p; q; q = q->next) {
         u32_t n = q->len / 4;
         u32_t rem = q->len % 4;
-        for (u32_t i = 0; i < n; i++)
+        for (u32_t i = 0; i < n; i++) {
             HWREG(ETH_BASE + MAC_O_DATA) = ((u32_t*)q->payload)[i];
+        }
         // uh-oh, slow path
         if (rem) {
             u32_t ptr = n * 4; // q->len - rem?
@@ -115,6 +127,8 @@ static void pkt_xmit(struct pbuf *p)
             if (!q) break;
         }
     }
+    HWREG(ETH_BASE + MAC_O_TR) = MAC_TR_NEWTX;
+
     LINK_STATS_INC(link.xmit);
     pbuf_free(p);
 }
@@ -133,6 +147,7 @@ static err_t ethernetif_output(struct netif *netif, struct pbuf *p)
     struct txdesc *txq = netif->state;
     SYS_ARCH_DECL_PROTECT(lev);
     SYS_ARCH_PROTECT(lev);
+    pbuf_ref(p);
     u32_t qlen = txq->n - txq->p;
     if ((qlen == 0) && ((HWREG(ETH_BASE + MAC_O_TR) & MAC_TR_NEWTX) == 0)) {
         pkt_xmit(p);
@@ -153,12 +168,14 @@ static err_t ethernetif_output(struct netif *netif, struct pbuf *p)
 // receive packet (from interrupt ctx)
 static struct pbuf *pkt_recv(struct netif *netif)
 {
-    u32_t len = (HWREG(ETH_BASE + MAC_O_DATA)) & 0xffff;
-    struct pbuf *p = pbuf_alloc(PBUF_RAW, len, PBUF_POOL);
+    u32_t len = (HWREG(ETH_BASE + MAC_O_DATA));
+    int cnt = len & 0xffff;
+    struct pbuf *p = pbuf_alloc(PBUF_RAW, cnt, PBUF_POOL);
 
     // no buffer to drain into
     if (!p) {
-        for (u32_t i = 4; i < len; i += 4)
+        LWIP_DEBUGF(NETIF_DEBUG, ("pkt_recv: no buffer, drop\n"));
+        for (u32_t i = 4; i < cnt; i += 4)
             HWREG(ETH_BASE + MAC_O_DATA);
         LINK_STATS_INC(link.memerr);
         LINK_STATS_INC(link.drop);
@@ -170,24 +187,28 @@ static struct pbuf *pkt_recv(struct netif *netif)
     // fetch the packet (pbufs can be fragmented, so it is odd like this)
     u32_t first = 1;
     for (struct pbuf *q = p; q; q = q->next) {
-        u32_t n = q->len / 4;
-        for (u32_t i = first; i < n; i++)
+        u32_t n = (q->len+3) / 4;
+        for (u32_t i = first; i < n; i++) {
             ((u32_t *)q->payload)[i] = HWREG(ETH_BASE + MAC_O_DATA);
+//            cnt -= 4;
+//            if (cnt < 0) goto out;
+        }
         first = 0;
     }
+  //  out:;
     LINK_STATS_INC(link.recv);
-
+    return p;
 }
 
 // interrupt handler (must be setup and called externally)
 void ethernetif_interrupt(struct netif *netif)
 {
     // packet waiting in rx fifo
-    while ((HWREG(ETH_BASE + MAC_O_NP) & MAC_NP_NPR_M)) {
+    while (HWREG(ETH_BASE + MAC_O_NP) & MAC_NP_NPR_M) {
         struct pbuf *p = pkt_recv(netif);
         // not enough pools for packet
         if (!p) continue;
-        if (netif->input(p, netif) != ERR_OK) {
+        if (ethernet_input(p, netif) != ERR_OK) {
             LWIP_DEBUGF(NETIF_DEBUG, ("ethernetif_interrupt: input error\n"));
             pbuf_free(p);
             LINK_STATS_INC(link.memerr);
@@ -241,6 +262,7 @@ err_t ethernetif_init(struct netif *netif)
     EthernetMACAddrGet(ETH_BASE, &(netif->hwaddr[0]));
     netif->mtu = 1500;
     netif->flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_LINK_UP;
+
     EthernetIntDisable(ETH_BASE, (ETH_INT_PHY | ETH_INT_MDIO | ETH_INT_RXER | ETH_INT_RXOF | ETH_INT_TX | ETH_INT_TXER | ETH_INT_RX));
     u32_t n = EthernetIntStatus(ETH_BASE, false);
     EthernetIntClear(ETH_BASE, n);
@@ -248,7 +270,7 @@ err_t ethernetif_init(struct netif *netif)
     EthernetConfigSet(ETH_BASE, (ETH_CFG_TX_DPLXEN |ETH_CFG_TX_CRCEN | ETH_CFG_TX_PADEN | ETH_CFG_RX_AMULEN));
     EthernetEnable(ETH_BASE);
     IntEnable(INT_ETH);
-    EthernetIntEnable(ETH_BASE, ETH_INT_RX | ETH_INT_TX);
+    EthernetIntEnable(ETH_BASE, ETH_INT_RX|ETH_INT_TX);
 
     return ERR_OK;
 }

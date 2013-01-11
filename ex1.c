@@ -7,14 +7,13 @@
 
 int main()
 {
-    write(0, "hello world\n", 12);
-/*
     char *p = malloc(1024); int n;
     setbuf(stdout, NULL);
     while (1) {
-        printf("Input buffer @ %p, type something ...\n", p);
+        printf("Input buffer @ %p, type something, or 'exit' ...\n", p);
         scanf("%s%n", p, &n);
+	if (!strcmp(p, "exit")) exit(0);
         while (n) putchar(p[--n]);
         printf("\n");
-    }*/
+    }
 }

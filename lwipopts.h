@@ -1,5 +1,13 @@
 #ifndef __LWIPOPTS_H__
 #define __LWIPOPTS_H__
+
+#ifdef DEBUG
+#include <stdlib.h>
+#include <stdio.h>
+#define LWIP_PLATFORM_DIAG(msg) { printf msg ; }
+#define LWIP_PLATFORM_ASSERT(msg) { printf("LWIP_ASSERT: %s", msg); exit(254); }
+#endif
+
 #define HOST_TMR_INTERVAL               100         // default is 0
 //#define DHCP_EXPIRE_TIMER_MSECS         (60 * 1000)
 //#define INCLUDE_HTTPD_SSI
@@ -214,7 +222,7 @@
 #endif
 
 //#define LWIP_DBG_MIN_LEVEL              LWIP_DBG_LEVEL_OFF
-#define LWIP_DBG_MIN_LEVEL              LWIP_DBG_LEVEL_OFF
+#define LWIP_DBG_MIN_LEVEL              LWIP_DBG_LEVEL_ALL
 //#define LWIP_DBG_MIN_LEVEL              LWIP_DBG_LEVEL_WARNING
 //#define LWIP_DBG_MIN_LEVEL              LWIP_DBG_LEVEL_SERIOUS
 //#define LWIP_DBG_MIN_LEVEL              LWIP_DBG_LEVEL_SEVERE
@@ -222,8 +230,8 @@
 //#define LWIP_DBG_TYPES_ON               LWIP_DBG_ON
 #define LWIP_DBG_TYPES_ON               (LWIP_DBG_ON|LWIP_DBG_TRACE|LWIP_DBG_STATE|LWIP_DBG_FRESH)
 
-//#define ETHARP_DEBUG                    LWIP_DBG_ON     // default is OFF
-//#define NETIF_DEBUG                     LWIP_DBG_ON     // default is OFF
+#define ETHARP_DEBUG                    LWIP_DBG_ON     // default is OFF
+#define NETIF_DEBUG                     LWIP_DBG_ON     // default is OFF
 //#define PBUF_DEBUG                      LWIP_DBG_OFF
 //#define API_LIB_DEBUG                   LWIP_DBG_OFF
 //#define API_MSG_DEBUG                   LWIP_DBG_OFF
@@ -231,7 +239,7 @@
 //#define ICMP_DEBUG                      LWIP_DBG_OFF
 //#define IGMP_DEBUG                      LWIP_DBG_OFF
 //#define INET_DEBUG                      LWIP_DBG_OFF
-//#define IP_DEBUG                        LWIP_DBG_ON     // default is OFF
+#define IP_DEBUG                        LWIP_DBG_ON     // default is OFF
 //#define IP_REASS_DEBUG                  LWIP_DBG_OFF
 //#define RAW_DEBUG                       LWIP_DBG_OFF
 //#define MEM_DEBUG                       LWIP_DBG_OFF
@@ -250,7 +258,7 @@
 //#define TCPIP_DEBUG                     LWIP_DBG_OFF
 //#define PPP_DEBUG                       LWIP_DBG_OFF
 //#define SLIP_DEBUG                      LWIP_DBG_OFF
-//#define DHCP_DEBUG                      LWIP_DBG_ON     // default is OFF
+#define DHCP_DEBUG                      LWIP_DBG_ON     // default is OFF
 //#define AUTOIP_DEBUG                    LWIP_DBG_OFF
 //#define SNMP_MSG_DEBUG                  LWIP_DBG_OFF
 //#define SNMP_MIB_DEBUG                  LWIP_DBG_OFF

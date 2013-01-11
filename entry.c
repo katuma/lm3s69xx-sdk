@@ -1,6 +1,6 @@
-// glue code to make CS3 ANSI C library working
-
-#include <sys/stat.h>
+// entry point 
+// peripheral init code
+// interrupt vectors
 
 #include "inc/hw_ints.h"
 #include "inc/hw_ethernet.h"
@@ -16,80 +16,84 @@
 #include "driverlib/rom.h"
 #include "driverlib/rom_map.h"
 #include "driverlib/uart.h"
+#include "driverlib/systick.h"
 
-// int00 - this is the actual entrypoint
+#include "net.h"
+
+#include <stdlib.h>
+#include <stdio.h>
+
+#define SERIAL_BAUD_RATE        115200
+#define TICKS_PER_SECOND        100
+#define SYSTICKHZ               TICKS_PER_SECOND
+#define SYSTICKMS               (1000 / SYSTICKHZ)
+#define SYSTICK_INT_PRIORITY    0x80
+#define ETHERNET_INT_PRIORITY   0xc0
+
+static void sys_tick() {
+    return net_timer(SYSTICKMS);
+}
+
+extern unsigned long __cs3_stack;
+extern void __cs3_reset();
+
+void general_fault()
+{
+    printf("general fault occured\n");
+}
+
+void (*const __cs3_interrupt_vector_custom[NUM_INTERRUPTS])(void) __attribute__ ((section (".cs3.interrupt_vector"))) =
+{
+    [0] = (void*)&__cs3_stack,
+    [1] = __cs3_reset,
+    [2] = general_fault,
+    [3] = general_fault,
+    [4] = general_fault,
+    [5] = general_fault,
+    [6] = general_fault,
+    [7] = general_fault,
+    [8] = general_fault,
+    [9] = general_fault,
+    [10] = general_fault,
+    [11] = general_fault,
+    [12] = general_fault,
+    [13] = general_fault,
+    [14] = general_fault,
+    [FAULT_SYSTICK] = sys_tick,
+    [INT_ETH] = net_inthandler,
+};
+
+// init all your peripherals here
 extern void __cs3_start_c(void);
 void __cs3_reset() {
+    SysCtlClockSet(SYSCTL_SYSDIV_1 | SYSCTL_USE_OSC | SYSCTL_OSC_MAIN | SYSCTL_XTAL_8MHZ);
+
+    // ticker
+    SysTickPeriodSet(SysCtlClockGet() / SYSTICKHZ);
+    SysTickEnable();
+    SysTickIntEnable();
+
     // enable uart0 as stdout
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    IntMasterEnable();
     GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-    UARTConfigSetExpClk(UART0_BASE, SysCtlClockGet(), 115200, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE));
-    return __cs3_start_c();
+    UARTConfigSetExpClk(UART0_BASE, SysCtlClockGet(), SERIAL_BAUD_RATE, (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE | UART_CONFIG_PAR_NONE));
+
+    // ethernet
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_ETH);
+    SysCtlPeripheralReset(SYSCTL_PERIPH_ETH);
+    IntPrioritySet(INT_ETH, ETHERNET_INT_PRIORITY);
+
+    // enable interrupts
+    IntMasterEnable();
+    return __cs3_start_c(); // hands over control to main() eventually
 }
 
-int _write(int file, char *ptr, int len) {
-    int i;
-    for (i = 0; i < len; i++)
-        UARTCharPut(UART0_BASE, ptr[i]);
-    return i;
-}
-
-int _read(int file, char *ptr, int len)
+#if DEBUG
+void __error__(char *f, unsigned long l)
 {
-    int i;
-    for (i = 0; i < len; i++) {
-        char c = ptr[i] = UARTCharGet(UART0_BASE);
-// XXX horrible, ugly console echo hack
-#if 1
-        if (c == 10) UARTCharPut(UART0_BASE, 13);
-        UARTCharPut(UART0_BASE, c);
-        if (c == 13) UARTCharPut(UART0_BASE, c = ptr[i] = 10);
+    printf("ti lib ASSERT @ %d:%s\n",l,f);
+    exit(253);
+}
 #endif
-        if (c == 10) { i++; break; }
-    }
-    return i;
-}
-
-int _open(const char *name, int flags, int mode) {
-    return -1;
-}
-
-int _lseek(int file, int ptr, int dir) {
-    return 0;
-}
-
-int _isatty(int file) {
-    return 1;
-}
-
-int _fstat(int file, struct stat *st) {
-    st->st_mode = S_IFCHR;
-    return 0;
-}
-
-int _close(int file) {
-    return 0;
-}
-
-char *heap_end = 0;
-caddr_t _sbrk(int incr) {
-    extern char __cs3_heap_start;
-    extern char __cs3_heap_end;
-
-    static int inself = 0;
-    char *prev;
-    if (!heap_end)
-        heap_end = &__cs3_heap_start;
-    prev = heap_end;
-    if (heap_end + incr > &__cs3_heap_end) {
-        //write(1, "heap oflow\n", 11);
-        return 0;
-    }
-    heap_end += incr;
-    return prev;
-}
-
-
 

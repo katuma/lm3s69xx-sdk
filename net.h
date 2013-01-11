@@ -10,6 +10,7 @@
 #include "lwip/sockets.h"
 #include "lwip/mem.h"
 #include "lwip/stats.h"
+#include "inc/hw_types.h"
 
 #include "driverlib/ethernet.h"
 
@@ -20,7 +21,6 @@
 extern void net_init(const u8_t *, u32_t, u32_t, u32_t, int);
 extern void net_change(u32_t, u32_t, u32_t, int);
 
-// TI stuff
-extern void lwIPTimer(u32_t);
-extern void lwIPEthernetIntHandler(void);
+extern void net_timer(u32_t);
+extern void net_inthandler(void);
 

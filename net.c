@@ -1,9 +1,13 @@
+#include "lwip/opt.h"
+
 #include "inc/hw_ints.h"
 #include "inc/hw_ethernet.h"
 #include "inc/hw_memmap.h"
 #include "inc/hw_nvic.h"
 #include "inc/hw_sysctl.h"
 #include "inc/hw_types.h"
+#include "inc/hw_flash.h"
+
 #include "driverlib/debug.h"
 #include "driverlib/ethernet.h"
 #include "driverlib/gpio.h"
@@ -12,7 +16,6 @@
 #include "driverlib/rom.h"
 #include "driverlib/rom_map.h"
 
-#include "lwip/opt.h"
 #include "lwip/sys.h"
 
 
@@ -125,6 +128,29 @@ void net_init(const u8_t *mac, u32_t ip,
     // start ethernet
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ETH);
 
+    // no mac specified - use nvram
+    if (!mac) {
+        // read mac addr from flash
+        u32_t mac1 = HWREG(FLASH_USERREG0);
+        u32_t mac2 = HWREG(FLASH_USERREG1);
+        static u8_t macp[6];
+        mac = macp;
+
+        // convert mac from weird nvram format
+        for (int i = 0; i < 3; i++) {
+            macp[i] = (mac1 >> (i*8)) & 0xff;
+            macp[i+3] = (mac2 >> (i*8)) & 0xff;
+        }
+    }
+#if DEBUG
+    printf("mac:");
+	for (int i = 0; i < 6; i++)
+		printf("%02hhx:", mac[i]);
+    printf("\n");
+#endif
+
+    LWIP_DEBUGF(NETIF_DEBUG, ("set mac\n"));
+
     // set mac
     EthernetMACAddrSet(ETH_BASE, (u8_t*)mac);
 
@@ -140,27 +166,18 @@ void net_init(const u8_t *mac, u32_t ip,
 }
 
 
-////////////////// TI interface (thus the hungarian notation) /////////////
-
-// TI API - called from driver
-void lwIPTimer(unsigned long ms)
+void net_timer(u32_t ms)
 {
     now += ms;
-
-    // that's right, we can't do timer processing here, because it calls into
-    // guts of lwip. ethernet interrupt might happen at the same time and trash stuff
-    // without some sort of locking. oops.
-
-    // = aka linux ksoftirq
-    // since interrupts provide "thread safety", this ensures that the
-    // function below is called within the same (interrupt) context at all times.
-    HWREG(NVIC_SW_TRIG) |= INT_ETH - 16;
+    IntPendSet(INT_ETH);
 }
 
-// TI API - interrupt handler
-void lwIPEthernetIntHandler(void)
+void net_inthandler(void)
 {
     unsigned long rc;
+
+    SYS_ARCH_DECL_PROTECT(lev);
+    SYS_ARCH_PROTECT(lev);
 
     // clear int
     rc = EthernetIntStatus(ETH_BASE, false);
@@ -171,8 +188,9 @@ void lwIPEthernetIntHandler(void)
         ethernetif_interrupt(&net_if);
 
     // periodicity is ensured by soft irq trigger via lwIPTimer above
-    mdi_timer();
+    //mdi_timer();
     sys_check_timeouts();
+    SYS_ARCH_UNPROTECT(lev);
 }
 
 
